@@ -428,7 +428,7 @@ public:
         SocowVector tmp(*this, big_->capacity);
         new (tmp.big_->data_ + size()) T(std::forward<U>(value));
         ++tmp.size_;
-        clear();
+        clear_data(*this);
         big_ = tmp.big_;
         tmp.big_ = nullptr;
         is_big = true;
@@ -453,7 +453,7 @@ public:
       throw;
     }
     ++tmp.size_;
-    clear();
+    clear_data(*this);
     big_ = tmp.big_;
     tmp.big_ = nullptr;
     is_big = true;
