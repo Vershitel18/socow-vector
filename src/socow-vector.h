@@ -524,12 +524,11 @@ public:
         size_ = 0;
         return;
       }
-      // detauch();
-      // for (std::size_t index = size(); index > 0; --index) {
-      //   (big_->data_ + index - 1)->~T();
-      // }
-      SocowVector tmp(size());
-      swap(tmp);
+      Buffer* buffer = static_cast<Buffer*>(operator new(sizeof(Buffer) + capacity()*sizeof(T), std::align_val_t(alignof(T))));
+      buffer->ref_count = 1;
+      --big_->ref_count;
+      buffer->capacity = capacity();
+      big_ = buffer;
       size_ = 0;
     }
   }
