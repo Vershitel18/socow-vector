@@ -524,7 +524,8 @@ public:
         size_ = 0;
         return;
       }
-      Buffer* buffer = static_cast<Buffer*>(operator new(sizeof(Buffer) + capacity()*sizeof(T), std::align_val_t(alignof(T))));
+      Buffer* buffer =
+          static_cast<Buffer*>(operator new(sizeof(Buffer) + capacity() * sizeof(T), std::align_val_t(alignof(T))));
       buffer->ref_count = 1;
       --big_->ref_count;
       buffer->capacity = capacity();
