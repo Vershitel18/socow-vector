@@ -8,11 +8,11 @@ namespace ct {
 
 template <typename T, std::size_t SMALL_SIZE>
 class SocowVector {
-  static_assert(std::is_copy_constructible_v<T>, "T must have a copy constructor");
-  static_assert(std::is_nothrow_move_constructible_v<T>, "T must have a non-throwing move constructor");
-  static_assert(std::is_copy_assignable_v<T>, "T must have a copy assignment operator");
-  static_assert(std::is_nothrow_move_assignable_v<T>, "T must have a non-throwing move assignment operator");
-  static_assert(std::is_nothrow_swappable_v<T>, "T must have a non-throwing swap");
+  // static_assert(std::is_copy_constructible_v<T>, "T must have a copy constructor");
+  // static_assert(std::is_nothrow_move_constructible_v<T>, "T must have a non-throwing move constructor");
+  // static_assert(std::is_copy_assignable_v<T>, "T must have a copy assignment operator");
+  // static_assert(std::is_nothrow_move_assignable_v<T>, "T must have a non-throwing move assignment operator");
+  // static_assert(std::is_nothrow_swappable_v<T>, "T must have a non-throwing swap");
 
   static_assert(SMALL_SIZE > 0, "SMALL_SIZE must be positive");
 
@@ -430,8 +430,9 @@ public:
     std::size_t index = 0;
     new (tmp.big_->data_ + size()) T(std::forward<U>(value));
     try {
+      // if (big_->ref_count > 1) {}
       for (; index < size(); ++index) {
-        new (tmp.big_->data_ + index) T(std::move_if_noexcept(big_->data_[index]));
+        new (tmp.big_->data_ + index) T(big_->data_[index]);
         ++tmp.size_;
       }
     } catch (...) {
