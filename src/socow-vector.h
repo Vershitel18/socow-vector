@@ -665,7 +665,7 @@ private:
           clear_data(*this); // clear buffer(on size) and call operator delete
           throw;
         }
-        size_ = other.size();
+        // size_ = other.size();
         return;
       }
       is_big = false;
