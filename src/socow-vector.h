@@ -428,7 +428,11 @@ public:
         SocowVector tmp(*this, big_->capacity);
         new (tmp.big_->data_ + size()) T(std::forward<U>(value));
         ++tmp.size_;
-        swap(tmp);
+        clear();
+        big_ = tmp.big_;
+        tmp.big_ = nullptr;
+        is_big = true;
+        size_ = tmp.size_;
       } else {
         new (big_->data_ + size()) T(std::forward<U>(value));
         ++size_;
@@ -449,7 +453,11 @@ public:
       throw;
     }
     ++tmp.size_;
-    swap(tmp);
+    clear();
+    big_ = tmp.big_;
+    tmp.big_ = nullptr;
+    is_big = true;
+    size_ = tmp.size_;
   }
 
   // Strong garanty
