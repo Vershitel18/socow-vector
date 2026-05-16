@@ -419,7 +419,7 @@ public:
         size_ = tmp.size_;
         return;
       }
-      new (small_ + size()) T(std::forward<U>(value));
+      new (small_ + size()) T(value);
       ++size_;
       return;
     }
