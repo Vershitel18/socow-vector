@@ -410,7 +410,7 @@ public:
         // size_ = size_old + 1;
 
         SocowVector tmp(*this, new_capacity(size()));
-        new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+        new (tmp.big_->data_ + size()) T(value);
         ++tmp.size_;
         clear();
         big_ = tmp.big_;
