@@ -9,10 +9,10 @@ namespace ct {
 template <typename T, std::size_t SMALL_SIZE>
 class SocowVector {
   static_assert(std::is_copy_constructible_v<T>, "T must have a copy constructor");
-  // static_assert(std::is_nothrow_move_constructible_v<T>, "T must have a non-throwing move constructor");
+  static_assert(std::is_nothrow_move_constructible_v<T>, "T must have a non-throwing move constructor");
   static_assert(std::is_copy_assignable_v<T>, "T must have a copy assignment operator");
-  // static_assert(std::is_nothrow_move_assignable_v<T>, "T must have a non-throwing move assignment operator");
-  // static_assert(std::is_nothrow_swappable_v<T>, "T must have a non-throwing swap");
+  static_assert(std::is_nothrow_move_assignable_v<T>, "T must have a non-throwing move assignment operator");
+  static_assert(std::is_nothrow_swappable_v<T>, "T must have a non-throwing swap");
 
   static_assert(SMALL_SIZE > 0, "SMALL_SIZE must be positive");
 
@@ -57,7 +57,7 @@ public:
     } else {
       std::size_t index = 0;
       try {
-        for (index; index < other.size_; ++index) {
+        for (; index < other.size_; ++index) {
           new (small_ + index) T(other.small_[index]);
         }
       } catch (...) {
@@ -93,9 +93,8 @@ public:
   SocowVector& operator=(const SocowVector& other) {
     if (this != &other) {
       if (is_small(other)) {
-        std::size_t index = 0;
         SocowVector tmp{};
-        for (; index < other.size_; ++index) {
+        for (std::size_t index = 0; index < other.size_; ++index) {
           new (tmp.small_ + index) T(other.small_[index]);
           ++tmp.size_;
         }
