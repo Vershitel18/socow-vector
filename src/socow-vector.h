@@ -379,35 +379,44 @@ public:
     if (is_small(*this)) {
       if (size() == SMALL_SIZE) {
         // small_to_big(*this, new_capacity(size()));
-        Buffer* buffer = static_cast<Buffer*>(operator new(
-            sizeof(Buffer) + (new_capacity(size()) * sizeof(T)),
-            std::align_val_t(alignof(T))
-        ));
-        buffer->capacity = new_capacity(size());
-        buffer->ref_count = 1;
-        std::size_t size_old = size_;
-        try {
-          new (buffer->data_ + size()) T(std::forward<U>(value));
-          std::size_t index = 0;
-          try {
-            for (; index < size(); ++index) {
-              new (buffer->data_ + index) T(small_[index]);
-            }
-          } catch (...) {
-            for (; index > 0; --index) {
-              (buffer->data_ + index - 1)->~T();
-            }
-            (buffer->data_ + size())->~T();
-            throw;
-          }
-        } catch (...) {
-          operator delete(buffer, std::align_val_t(alignof(T)));
-          throw;
-        }
-        clear_data(*this);
-        big_ = buffer;
+        // Buffer* buffer = static_cast<Buffer*>(operator new(
+        //     sizeof(Buffer) + (new_capacity(size()) * sizeof(T)),
+        //     std::align_val_t(alignof(T))
+        // ));
+        // buffer->capacity = new_capacity(size());
+        // buffer->ref_count = 1;
+        // std::size_t size_old = size_;
+        // try {
+        //   new (buffer->data_ + size()) T(std::forward<U>(value));
+        //   std::size_t index = 0;
+        //   try {
+        //     for (; index < size(); ++index) {
+        //       new (buffer->data_ + index) T(std::move(small_[index]));
+        //     }
+        //   } catch (...) {
+        //     for (; index > 0; --index) {
+        //       (buffer->data_ + index - 1)->~T();
+        //     }
+        //     (buffer->data_ + size())->~T();
+        //     throw;
+        //   }
+        // } catch (...) {
+        //   operator delete(buffer, std::align_val_t(alignof(T)));
+        //   throw;
+        // }
+        // clear_data(*this);
+        // big_ = buffer;
+        // is_big = true;
+        // size_ = size_old + 1;
+
+        SocowVector tmp(*this, new_capacity(size()));
+        new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+        ++tmp.size_;
+        clear();
+        big_ = tmp.big_;
+        tmp.big_ = nullptr;
         is_big = true;
-        size_ = size_old + 1;
+        size_ = tmp.size_;
         return;
       }
       new (small_ + size()) T(std::forward<U>(value));
@@ -524,12 +533,8 @@ public:
         size_ = 0;
         return;
       }
-      Buffer* buffer =
-          static_cast<Buffer*>(operator new(sizeof(Buffer) + capacity() * sizeof(T), std::align_val_t(alignof(T))));
-      buffer->ref_count = 1;
-      --big_->ref_count;
-      buffer->capacity = capacity();
-      big_ = buffer;
+      SocowVector tmp{};
+      swap(tmp);
       size_ = 0;
     }
   }
@@ -610,24 +615,78 @@ public:
   }
 
   Iterator insert(ConstIterator pos, const T& value) {
-    std::size_t offset = pos - raw_data();
+    ConstPointer base = static_cast<const SocowVector&>(*this).begin();
+    std::size_t offset = pos - base;
+
+    if (!is_small(*this) && big_->ref_count > 1) {
+      SocowVector tmp(size_ + 1);
+
+      Pointer new_data = tmp.raw_data();
+      ConstPointer old_data = static_cast<const SocowVector&>(*this).begin();
+
+      for (std::size_t i = 0; i < offset; ++i) {
+        new (new_data + tmp.size_) T(old_data[i]);
+        ++tmp.size_;
+      }
+
+      new (new_data + tmp.size_) T(value);
+      ++tmp.size_;
+
+      for (std::size_t i = offset; i < size_; ++i) {
+        new (new_data + tmp.size_) T(old_data[i]);
+        ++tmp.size_;
+      }
+
+      swap(tmp);
+      return raw_data() + offset;
+    }
+
     push_back(value);
+
     Iterator mutable_pos = raw_data() + offset;
     for (auto it = raw_data() + size() - 1; it != mutable_pos; --it) {
       std::swap(*it, *(it - 1));
     }
+
     return raw_data() + offset;
   }
 
   // O(N) basic garanty, if swap for T no noexcept
   // если же swap noexcept для T, то это strong garanty
   Iterator insert(ConstIterator pos, T&& value) {
-    std::size_t offset = pos - raw_data();
+    ConstPointer base = static_cast<const SocowVector&>(*this).begin();
+    std::size_t offset = pos - base;
+
+    if (!is_small(*this) && big_->ref_count > 1) {
+      SocowVector tmp(size_ + 1);
+
+      Pointer new_data = tmp.raw_data();
+      ConstPointer old_data = static_cast<const SocowVector&>(*this).begin();
+
+      for (std::size_t i = 0; i < offset; ++i) {
+        new (new_data + tmp.size_) T(old_data[i]);
+        ++tmp.size_;
+      }
+
+      new (new_data + tmp.size_) T(std::move(value));
+      ++tmp.size_;
+
+      for (std::size_t i = offset; i < size_; ++i) {
+        new (new_data + tmp.size_) T(old_data[i]);
+        ++tmp.size_;
+      }
+
+      swap(tmp);
+      return raw_data() + offset;
+    }
+
     push_back(std::move(value));
+
     Iterator mutable_pos = raw_data() + offset;
     for (auto it = raw_data() + size() - 1; it != mutable_pos; --it) {
       std::swap(*it, *(it - 1));
     }
+
     return raw_data() + offset;
   }
 
