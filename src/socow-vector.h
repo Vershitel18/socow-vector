@@ -389,10 +389,6 @@ public:
       SocowVector tmp(new_capacity(size())); // -> big unshared buffer
       new (tmp.big_->data_ + size()) T(std::forward<U>(value));
       std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
-      // for (std::size_t index = 0; index < size(); ++index) {
-      //   new (tmp.big_->data_ + index) T(std::move(small_[index])); // move old elements
-      //   ++tmp.size_;
-      // }
       tmp.size_ = size() + 1;
       clear(); // for small we destruction oll elements in vector and size_ = 0
       swap(tmp);
@@ -419,25 +415,16 @@ public:
             (tmp.big_->data_ + size())->~T();
             throw;
           }
-          // for (std::size_t index = 0; index < size(); ++index ) {
-          //   new (tmp.big_->data_ + index) T(std::move(big_->data_[index]));
-          //   ++tmp.size_;
-          // }
           ++tmp.size_;
           clear();
           swap(tmp);
         } else {
           SocowVector tmp(new_capacity(size()));
-          new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-          try {
-            for (std::size_t index = 0; index < size(); ++index) {
-              new (tmp.big_->data_ + index) T(big_->data_[index]);
-              ++tmp.size_;
-            }
-          } catch (...) {
-            (tmp.big_->data_ + size())->~T();
-            throw;
+          for (std::size_t index = 0; index < size(); ++index) {
+            new (tmp.big_->data_ + index) T(big_->data_[index]);
+            ++tmp.size_;
           }
+          new (tmp.big_->data_ + size()) T(std::forward<U>(value));
           ++tmp.size_;
           clear();
           swap(tmp);
