@@ -481,6 +481,7 @@ public:
         // detauch(); // strong garanty
         // (big_->data_ + size() - 1)->~T(); // nothrow
         SocowVector tmp(*this, size() - 1);
+        clear();
         swap(tmp);
       }
     }
@@ -496,15 +497,15 @@ public:
   }
 
   void shrink_to_fit() {
+    if (size() == capacity()) {
+      return;
+    }
     if (is_small(*this)) {
       return;
     }
-
-    if (capacity() > size_) {
-      SocowVector tmp(*this, size_);
-      clear();
-      swap(tmp);
-    }
+    SocowVector tmp(*this, size_);
+    clear();
+    swap(tmp);
   }
 
   void clear_data(SocowVector& object) {
