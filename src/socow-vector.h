@@ -670,47 +670,7 @@ public:
   Iterator insert(ConstIterator pos, const T& value) {
     ConstPointer base = static_cast<const SocowVector&>(*this).begin();
     std::size_t offset = pos - base;
-    // if (is_small(*this) && size_ == SMALL_SIZE) {
-    //   SocowVector tmp(new_capacity(size_));
-    //
-    //   for (std::size_t i = 0; i < offset; ++i) {
-    //     new (tmp.big_->data_ + tmp.size_) T(small_[i]);
-    //     ++tmp.size_;
-    //   }
-    //
-    //   new (tmp.big_->data_ + tmp.size_) T(value);
-    //   ++tmp.size_;
-    //
-    //   for (std::size_t i = offset; i < size_; ++i) {
-    //     new (tmp.big_->data_ + tmp.size_) T(small_[i]);
-    //     ++tmp.size_;
-    //   }
-    //
-    //   replace_with(tmp);
-    //   return raw_data() + offset;
-    // }
-    // if (!is_small(*this) && big_->ref_count > 1) {
-    //   SocowVector tmp(size_ + 1);
-    //
-    //   Pointer new_data = tmp.raw_data();
-    //   ConstPointer old_data = static_cast<const SocowVector&>(*this).begin();
-    //
-    //   for (std::size_t i = 0; i < offset; ++i) {
-    //     new (new_data + tmp.size_) T(old_data[i]);
-    //     ++tmp.size_;
-    //   }
-    //
-    //   new (new_data + tmp.size_) T(value);
-    //   ++tmp.size_;
-    //
-    //   for (std::size_t i = offset; i < size_; ++i) {
-    //     new (new_data + tmp.size_) T(old_data[i]);
-    //     ++tmp.size_;
-    //   }
-    //   clear();
-    //   swap(tmp);
-    //   return raw_data() + offset;
-    // }
+
 
     push_back(value);
 
