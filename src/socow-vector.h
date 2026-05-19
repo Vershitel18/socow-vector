@@ -374,6 +374,8 @@ public:
     return big_->data_ + size_;
   }
 
+  // if small or big_unshared and realocation -> constract new element in new place -> move old elements
+  // if big_shared and realocation -> copy old elements -> constract new element in new place
   template <typename U>
   void push_back_method(U&& value) {
     if (is_small(*this)) {
@@ -489,6 +491,9 @@ public:
 
   // strong
   void reserve(std::size_t new_capacity) {
+    if (is_small(*this) && new_capacity <= SMALL_SIZE) {
+      return;
+    }
     if (capacity() < new_capacity || (!is_small(*this) && big_->ref_count > 1 && new_capacity > size_)) {
       SocowVector tmp(*this, new_capacity);
       clear();
@@ -548,26 +553,6 @@ public:
 
   Iterator erase(ConstIterator pos) {
     return erase(pos, pos + 1);
-  }
-
-  void replace_with(SocowVector& tmp) noexcept {
-    clear_data(*this);
-
-    size_ = tmp.size_;
-    is_big = tmp.is_big;
-
-    if (tmp.is_big) {
-      big_ = tmp.big_;
-      tmp.big_ = nullptr;
-      tmp.is_big = false;
-      tmp.size_ = 0;
-    } else {
-      for (std::size_t i = 0; i < tmp.size_; ++i) {
-        new (small_ + i) T(std::move(tmp.small_[i]));
-        tmp.small_[i].~T();
-      }
-      tmp.size_ = 0;
-    }
   }
 
   Iterator erase(ConstIterator first, ConstIterator last) {
