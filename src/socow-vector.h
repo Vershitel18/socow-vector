@@ -378,39 +378,18 @@ public:
   void push_back_method(U&& value) {
     if (is_small(*this)) {
       if (size() == SMALL_SIZE) {
-        // small_to_big(*this, new_capacity(size()));
-        // Buffer* buffer = static_cast<Buffer*>(operator new(
-        //     sizeof(Buffer) + (new_capacity(size()) * sizeof(T)),
-        //     std::align_val_t(alignof(T))
-        // ));
-        // buffer->capacity = new_capacity(size());
-        // buffer->ref_count = 1;
-        // std::size_t size_old = size_;
-        // try {
-        //   new (buffer->data_ + size()) T(std::forward<U>(value));
-        //   std::size_t index = 0;
-        //   try {
-        //     for (; index < size(); ++index) {
-        //       new (buffer->data_ + index) T(std::move(small_[index]));
-        //     }
-        //   } catch (...) {
-        //     for (; index > 0; --index) {
-        //       (buffer->data_ + index - 1)->~T();
-        //     }
-        //     (buffer->data_ + size())->~T();
-        //     throw;
-        //   }
-        // } catch (...) {
-        //   operator delete(buffer, std::align_val_t(alignof(T)));
-        //   throw;
-        // }
-        // clear_data(*this);
-        // big_ = buffer;
-        // is_big = true;
-        // size_ = size_old + 1;
-
-        SocowVector tmp(*this, new_capacity(size()));
-        new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+        SocowVector tmp(new_capacity(size()));
+        try {
+          new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+          std::size_t index = 0;
+          for (; index < size(); ++index) {
+            new (tmp.big_->data_ + index) T(std::move(small_[index]));
+            ++tmp.size_;
+          }
+        } catch (...) {
+          (tmp.big_->data_ + size())->~T();
+          throw;
+        }
         ++tmp.size_;
         clear_data(*this);
         big_ = tmp.big_;
@@ -441,16 +420,24 @@ public:
     }
     SocowVector tmp(new_capacity(big_->capacity));
     std::size_t index = 0;
-    new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-    try {
-      // if (big_->ref_count > 1) {}
+    if (big_->ref_count > 1) {
+      std::size_t index = 0;
       for (; index < size(); ++index) {
         new (tmp.big_->data_ + index) T(big_->data_[index]);
         ++tmp.size_;
       }
-    } catch (...) {
-      (tmp.big_->data_ + size())->~T();
-      throw;
+      new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+    } else {
+      new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+      try {
+        for (; index < size(); ++index) {
+          new (tmp.big_->data_ + index) T(std::move(big_->data_[index]));
+          ++tmp.size_;
+        }
+      } catch (...) {
+        (tmp.big_->data_ + size())->~T();
+        throw;
+      }
     }
     ++tmp.size_;
     clear_data(*this);
