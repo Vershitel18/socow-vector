@@ -671,7 +671,6 @@ public:
     ConstPointer base = static_cast<const SocowVector&>(*this).begin();
     std::size_t offset = pos - base;
 
-
     push_back(value);
 
     Iterator mutable_pos = raw_data() + offset;
