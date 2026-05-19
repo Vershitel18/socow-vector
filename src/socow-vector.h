@@ -379,16 +379,11 @@ public:
     if (is_small(*this)) {
       if (size() == SMALL_SIZE) {
         SocowVector tmp(new_capacity(size()));
-        try {
-          new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-          for (std::size_t index = 0; index < size(); ++index) {
-            new (tmp.big_->data_ + index) T(std::move(small_[index]));
-            ++tmp.size_;
-          }
-        } catch (...) {
-          (tmp.big_->data_ + size())->~T();
-          throw;
+        for (std::size_t index = 0; index < size(); ++index) {
+          new (tmp.big_->data_ + index) T(small_[index]);
+          ++tmp.size_;
         }
+        new (tmp.big_->data_ + size()) T(std::forward<U>(value));
         ++tmp.size_;
         clear_data(*this);
         big_ = tmp.big_;
