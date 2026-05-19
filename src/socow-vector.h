@@ -410,16 +410,16 @@ public:
         // size_ = size_old + 1;
 
         SocowVector tmp(*this, new_capacity(size()));
-        new (tmp.big_->data_ + size()) T(value);
+        new (tmp.big_->data_ + size()) T(std::forward<U>(value));
         ++tmp.size_;
-        clear();
+        clear_data(*this);
         big_ = tmp.big_;
         tmp.big_ = nullptr;
         is_big = true;
         size_ = tmp.size_;
         return;
       }
-      new (small_ + size()) T(value);
+      new (small_ + size()) T(std::forward<U>(value));
       ++size_;
       return;
     }
@@ -467,7 +467,15 @@ public:
 
   // Basic garanty, because value maybe in object
   void push_back(T&& value) {
-    push_back_method(std::move(value));
+    Pointer first = raw_data();
+    Pointer last = first + size_;
+
+    if (first <= &value && &value < last) {
+      T tmp(value);
+      push_back_method(tmp);
+    } else {
+      push_back_method(std::move(value));
+    }
   }
 
   // strong garanty, because detauch have strong garanry
