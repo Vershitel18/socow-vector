@@ -420,12 +420,14 @@ public:
           swap(tmp);
         } else {
           SocowVector tmp(new_capacity(size()));
-          for (std::size_t index = 0; index < size(); ++index) {
-            new (tmp.big_->data_ + index) T(big_->data_[index]);
-            ++tmp.size_;
-          }
           new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-          ++tmp.size_;
+          try {
+            std::uninitialized_copy_n(raw_data(), size(), tmp.raw_data());
+          } catch (...) {
+            (tmp.big_->data_ + size())->~T();
+            throw;
+          }
+          tmp.size_ = size() + 1;
           clear();
           swap(tmp);
         }
