@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <memory>
 #include <type_traits>
 
 namespace ct {
@@ -387,101 +388,150 @@ public:
       // места в маленьком векторе не хватает -> нужно перейти в большой
       SocowVector tmp(new_capacity(size())); // -> big unshared buffer
       new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-      for (std::size_t index = 0; index < size(); ++index) {
-        new (tmp.big_->data_ + index) T(std::move(small_[index])); // move old elements
-        ++tmp.size_;
-      }
+      std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
+      // for (std::size_t index = 0; index < size(); ++index) {
+      //   new (tmp.big_->data_ + index) T(std::move(small_[index])); // move old elements
+      //   ++tmp.size_;
+      // }
+      tmp.size_ = size() + 1;
       clear(); // for small we destruction oll elements in vector and size_ = 0
       swap(tmp);
-    }
-  }
-
-  template <typename U>
-  void push_back_method(U&& value) {
-    if (is_small(*this)) {
-      if (size_ < SMALL_SIZE) {
-        new (small_ + size_) T(std::forward<U>(value));
-        ++size_;
-        return;
-      }
-
-      SocowVector tmp(*this, new_capacity(size_));
-
-      new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
-      ++tmp.size_;
-
-      clear_data(*this);
-
-      big_ = tmp.big_;
-      tmp.big_ = nullptr;
-      is_big = true;
-      size_ = tmp.size_;
-      return;
-    }
-
-    if (big_->capacity > size_) {
-      if (big_->ref_count == 1) {
-        new (big_->data_ + size_) T(std::forward<U>(value));
-        ++size_;
-        return;
-      }
-
-      SocowVector tmp(*this, big_->capacity);
-
-      new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
-      ++tmp.size_;
-
-      clear_data(*this);
-
-      big_ = tmp.big_;
-      tmp.big_ = nullptr;
-      is_big = true;
-      size_ = tmp.size_;
-      return;
-    }
-
-    SocowVector tmp(new_capacity(big_->capacity));
-
-    if (big_->ref_count > 1) {
-      for (std::size_t i = 0; i < size_; ++i) {
-        new (tmp.big_->data_ + tmp.size_) T(big_->data_[i]);
-        ++tmp.size_;
-      }
-
-      new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
-      ++tmp.size_;
-    } else {
-      new (tmp.big_->data_ + size_) T(std::forward<U>(value));
-
-      try {
-        for (std::size_t i = 0; i < size_; ++i) {
-          new (tmp.big_->data_ + tmp.size_) T(std::move(big_->data_[i]));
+    } else { // this is a big vector
+      if (capacity() > size()) { // место есть
+        if (big_->ref_count == 1) { // unshared big buffer
+          new (big_->data_ + size()) T(std::forward<U>(value));
+          ++size_;
+        } else { // shared big buffer
+          SocowVector tmp(*this, capacity());
+          new (tmp.big_->data_ + size()) T(std::forward<U>(value)); // constract new elements
           ++tmp.size_;
+          clear();
+          swap(tmp);
         }
-      } catch (...) {
-        (tmp.big_->data_ + size_)->~T();
-        throw;
+      } else { // места не хватает -> realocation
+        if (big_->ref_count == 1) { // unshared big buffer
+          SocowVector tmp(new_capacity(size()));
+          new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+          try {
+            std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
+            tmp.size_ = size();
+          } catch (...) {
+            (tmp.big_->data_ + size())->~T();
+            throw;
+          }
+          // for (std::size_t index = 0; index < size(); ++index ) {
+          //   new (tmp.big_->data_ + index) T(std::move(big_->data_[index]));
+          //   ++tmp.size_;
+          // }
+          ++tmp.size_;
+          clear();
+          swap(tmp);
+        } else {
+          SocowVector tmp(new_capacity(size()));
+          new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+          try {
+            for (std::size_t index = 0; index < size(); ++index) {
+              new (tmp.big_->data_ + index) T(big_->data_[index]);
+              ++tmp.size_;
+            }
+          } catch (...) {
+            (tmp.big_->data_ + size())->~T();
+            throw;
+          }
+          ++tmp.size_;
+          clear();
+          swap(tmp);
+        }
       }
-
-      ++tmp.size_;
     }
-
-    clear_data(*this);
-
-    big_ = tmp.big_;
-    tmp.big_ = nullptr;
-    is_big = true;
-    size_ = tmp.size_;
   }
+
+  // template <typename U>
+  // void push_back_method(U&& value) {
+  //   if (is_small(*this)) {
+  //     if (size_ < SMALL_SIZE) {
+  //       new (small_ + size_) T(std::forward<U>(value));
+  //       ++size_;
+  //       return;
+  //     }
+  //
+  //     SocowVector tmp(*this, new_capacity(size_));
+  //
+  //     new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
+  //     ++tmp.size_;
+  //
+  //     clear_data(*this);
+  //
+  //     big_ = tmp.big_;
+  //     tmp.big_ = nullptr;
+  //     is_big = true;
+  //     size_ = tmp.size_;
+  //     return;
+  //   }
+  //
+  //   if (big_->capacity > size_) {
+  //     if (big_->ref_count == 1) {
+  //       new (big_->data_ + size_) T(std::forward<U>(value));
+  //       ++size_;
+  //       return;
+  //     }
+  //
+  //     SocowVector tmp(*this, big_->capacity);
+  //
+  //     new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
+  //     ++tmp.size_;
+  //
+  //     clear_data(*this);
+  //
+  //     big_ = tmp.big_;
+  //     tmp.big_ = nullptr;
+  //     is_big = true;
+  //     size_ = tmp.size_;
+  //     return;
+  //   }
+  //
+  //   SocowVector tmp(new_capacity(big_->capacity));
+  //
+  //   if (big_->ref_count > 1) {
+  //     for (std::size_t i = 0; i < size_; ++i) {
+  //       new (tmp.big_->data_ + tmp.size_) T(big_->data_[i]);
+  //       ++tmp.size_;
+  //     }
+  //
+  //     new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
+  //     ++tmp.size_;
+  //   } else {
+  //     new (tmp.big_->data_ + size_) T(std::forward<U>(value));
+  //
+  //     try {
+  //       for (std::size_t i = 0; i < size_; ++i) {
+  //         new (tmp.big_->data_ + tmp.size_) T(std::move(big_->data_[i]));
+  //         ++tmp.size_;
+  //       }
+  //     } catch (...) {
+  //       (tmp.big_->data_ + size_)->~T();
+  //       throw;
+  //     }
+  //
+  //     ++tmp.size_;
+  //   }
+  //
+  //   clear_data(*this);
+  //
+  //   big_ = tmp.big_;
+  //   tmp.big_ = nullptr;
+  //   is_big = true;
+  //   size_ = tmp.size_;
+  // }
 
   // Strong garanty
   void push_back(const T& value) {
-    push_back_method(value);
+    push_back_me(value);
   }
 
   // Basic garanty, because value maybe in object
   void push_back(T&& value) {
-    push_back_method(std::move(value));
+    push_back_me(std::move(value));
   }
 
   // strong garanty, because detauch have strong garanry
@@ -499,6 +549,7 @@ public:
         }
         // detauch(); // strong garanty
         // (big_->data_ + size() - 1)->~T(); // nothrow
+        // --size_;
         SocowVector tmp(*this, size() - 1);
         clear();
         swap(tmp);
@@ -515,6 +566,7 @@ public:
       SocowVector tmp(*this, new_capacity);
       clear();
       swap(tmp);
+      return;
     }
   }
 
@@ -637,28 +689,28 @@ public:
     //   replace_with(tmp);
     //   return raw_data() + offset;
     // }
-    if (!is_small(*this) && big_->ref_count > 1) {
-      SocowVector tmp(size_ + 1);
-
-      Pointer new_data = tmp.raw_data();
-      ConstPointer old_data = static_cast<const SocowVector&>(*this).begin();
-
-      for (std::size_t i = 0; i < offset; ++i) {
-        new (new_data + tmp.size_) T(old_data[i]);
-        ++tmp.size_;
-      }
-
-      new (new_data + tmp.size_) T(value);
-      ++tmp.size_;
-
-      for (std::size_t i = offset; i < size_; ++i) {
-        new (new_data + tmp.size_) T(old_data[i]);
-        ++tmp.size_;
-      }
-      clear();
-      swap(tmp);
-      return raw_data() + offset;
-    }
+    // if (!is_small(*this) && big_->ref_count > 1) {
+    //   SocowVector tmp(size_ + 1);
+    //
+    //   Pointer new_data = tmp.raw_data();
+    //   ConstPointer old_data = static_cast<const SocowVector&>(*this).begin();
+    //
+    //   for (std::size_t i = 0; i < offset; ++i) {
+    //     new (new_data + tmp.size_) T(old_data[i]);
+    //     ++tmp.size_;
+    //   }
+    //
+    //   new (new_data + tmp.size_) T(value);
+    //   ++tmp.size_;
+    //
+    //   for (std::size_t i = offset; i < size_; ++i) {
+    //     new (new_data + tmp.size_) T(old_data[i]);
+    //     ++tmp.size_;
+    //   }
+    //   clear();
+    //   swap(tmp);
+    //   return raw_data() + offset;
+    // }
 
     push_back(value);
 
@@ -734,28 +786,17 @@ private:
         big_->capacity = capacity;
         big_->ref_count = 1;
         is_big = true;
-        try {
-          for (std::size_t index = 0; index < std::min(other.size_, capacity); ++index) {
-            new (big_->data_ + index) T(std::move(other.small_[index]));
-            ++size_;
-          }
-        } catch (...) {
-          clear_data(*this); // clear buffer(on size) and call operator delete
-          throw;
-        }
-        // size_ = other.size();
+        std::uninitialized_move_n(other.raw_data(), other.size(), raw_data());
+        size_ = other.size();
         return;
       }
       is_big = false;
-      try {
-        for (std::size_t index = 0; index < std::min(capacity, other.size()); ++index) {
-          new (small_ + index) T(std::move(other.small_[index]));
-          ++size_;
-        }
-      } catch (...) {
-        clear_data(*this);
-        throw;
-      }
+      std::uninitialized_move_n(other.raw_data(), std::min(capacity, other.size()), raw_data());
+      // for (std::size_t index = 0; index < std::min(capacity, other.size()); ++index) {
+      //   new (small_ + index) T(std::move(other.small_[index]));
+      //   ++size_;
+      // }
+      size_ = std::min(capacity, other.size());
       return;
       // capacity <= SMALL_SIZE -> сырая память в small_ уже есть размера больше чем capacity
     }
@@ -765,39 +806,43 @@ private:
       big_->capacity = capacity;
       big_->ref_count = 1;
       is_big = true;
-      try {
-        if (other.big_->ref_count == 1) {
-          for (std::size_t index = 0; index < std::min(other.size(), capacity); ++index) {
-            new (big_->data_ + index) T(std::move(other.big_->data_[index]));
-            ++size_;
-          }
-        } else {
+      if (other.big_->ref_count == 1) {
+        std::uninitialized_move_n(other.raw_data(), std::min(other.size(), capacity), raw_data());
+        // for (std::size_t index = 0; index < std::min(other.size(), capacity); ++index) {
+        //   new (big_->data_ + index) T(std::move(other.big_->data_[index]));
+        //   ++size_;
+        // }
+        size_ = std::min(capacity, other.size_);
+      } else {
+        try {
           for (std::size_t index = 0; index < std::min(other.size(), capacity); ++index) {
             new (big_->data_ + index) T(other.big_->data_[index]);
             ++size_;
           }
+        } catch (...) {
+          clear();
+          throw;
         }
-      } catch (...) {
-        clear_data(*this); // clear buffer(on size) and call operator delete
-        throw;
       }
     } else { // capacity <= SMALL_SIZE -> this - small mode vector
       is_big = false;
-      try {
-        if (other.big_->ref_count == 1) {
-          for (std::size_t index = 0; index < std::min(other.size_, capacity); ++index) {
-            new (small_ + index) T(std::move(other.big_->data_[index]));
-            ++size_;
-          }
-        } else {
+      if (other.big_->ref_count == 1) {
+        std::uninitialized_move_n(other.raw_data(), std::min(other.size(), capacity), raw_data());
+        // for (std::size_t index = 0; index < std::min(other.size(), capacity); ++index) {
+        //   new (big_->data_ + index) T(std::move(other.big_->data_[index]));
+        //   ++size_;
+        // }
+        size_ = std::min(capacity, other.size_);
+      } else {
+        try {
           for (std::size_t index = 0; index < std::min(other.size_, capacity); ++index) {
             new (small_ + index) T(other.big_->data_[index]);
             ++size_;
           }
+        } catch (...) {
+          clear();
+          throw;
         }
-      } catch (...) {
-        clear_data(*this);
-        throw;
       }
       return;
     }
@@ -807,7 +852,7 @@ private:
     return object.size_ <= SMALL_SIZE && object.is_big == false;
   }
 
-  void release_ref() {
+  void release_ref() noexcept {
     if (is_small(*this) || (big_ == nullptr)) {
       return;
     }
