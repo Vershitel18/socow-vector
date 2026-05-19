@@ -377,62 +377,75 @@ public:
   template <typename U>
   void push_back_method(U&& value) {
     if (is_small(*this)) {
-      if (size() == SMALL_SIZE) {
-        SocowVector tmp(new_capacity(size()));
-        for (std::size_t index = 0; index < size(); ++index) {
-          new (tmp.big_->data_ + index) T(small_[index]);
-          ++tmp.size_;
-        }
-        new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-        ++tmp.size_;
-        clear_data(*this);
-        big_ = tmp.big_;
-        tmp.big_ = nullptr;
-        is_big = true;
-        size_ = tmp.size_;
+      if (size_ < SMALL_SIZE) {
+        new (small_ + size_) T(std::forward<U>(value));
+        ++size_;
         return;
       }
-      new (small_ + size()) T(std::forward<U>(value));
-      ++size_;
+
+      SocowVector tmp(*this, new_capacity(size_));
+
+      new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
+      ++tmp.size_;
+
+      clear_data(*this);
+
+      big_ = tmp.big_;
+      tmp.big_ = nullptr;
+      is_big = true;
+      size_ = tmp.size_;
       return;
     }
-    if (big_->capacity > size()) {
-      if (big_->ref_count > 1) {
-        SocowVector tmp(*this, big_->capacity);
-        new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-        ++tmp.size_;
-        clear_data(*this);
-        big_ = tmp.big_;
-        tmp.big_ = nullptr;
-        is_big = true;
-        size_ = tmp.size_;
-      } else {
-        new (big_->data_ + size()) T(std::forward<U>(value));
+
+    if (big_->capacity > size_) {
+      if (big_->ref_count == 1) {
+        new (big_->data_ + size_) T(std::forward<U>(value));
         ++size_;
+        return;
       }
+
+      SocowVector tmp(*this, big_->capacity);
+
+      new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
+      ++tmp.size_;
+
+      clear_data(*this);
+
+      big_ = tmp.big_;
+      tmp.big_ = nullptr;
+      is_big = true;
+      size_ = tmp.size_;
       return;
     }
+
     SocowVector tmp(new_capacity(big_->capacity));
+
     if (big_->ref_count > 1) {
-      for (std::size_t index = 0; index < size(); ++index) {
-        new (tmp.big_->data_ + index) T(big_->data_[index]);
+      for (std::size_t i = 0; i < size_; ++i) {
+        new (tmp.big_->data_ + tmp.size_) T(big_->data_[i]);
         ++tmp.size_;
       }
-      new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+
+      new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
+      ++tmp.size_;
     } else {
-      new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+      new (tmp.big_->data_ + size_) T(std::forward<U>(value));
+
       try {
-        for (std::size_t index = 0; index < size(); ++index) {
-          new (tmp.big_->data_ + index) T(std::move(big_->data_[index]));
+        for (std::size_t i = 0; i < size_; ++i) {
+          new (tmp.big_->data_ + tmp.size_) T(std::move(big_->data_[i]));
           ++tmp.size_;
         }
       } catch (...) {
-        (tmp.big_->data_ + size())->~T();
+        (tmp.big_->data_ + size_)->~T();
         throw;
       }
+
+      ++tmp.size_;
     }
-    ++tmp.size_;
+
     clear_data(*this);
+
     big_ = tmp.big_;
     tmp.big_ = nullptr;
     is_big = true;
@@ -446,15 +459,7 @@ public:
 
   // Basic garanty, because value maybe in object
   void push_back(T&& value) {
-    Pointer first = raw_data();
-    Pointer last = first + size_;
-
-    if (first <= &value && &value < last) {
-      T tmp(value);
-      push_back_method(tmp);
-    } else {
-      push_back_method(std::move(value));
-    }
+    push_back_method(std::move(value));
   }
 
   // strong garanty, because detauch have strong garanry
