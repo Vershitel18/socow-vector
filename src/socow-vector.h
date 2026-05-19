@@ -419,7 +419,7 @@ public:
     }
     SocowVector tmp(new_capacity(big_->capacity));
     if (big_->ref_count > 1) {
-      for (std::size_t index = 0 ; index < size(); ++index) {
+      for (std::size_t index = 0; index < size(); ++index) {
         new (tmp.big_->data_ + index) T(big_->data_[index]);
         ++tmp.size_;
       }
