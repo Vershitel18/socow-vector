@@ -381,8 +381,7 @@ public:
         SocowVector tmp(new_capacity(size()));
         try {
           new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-          std::size_t index = 0;
-          for (; index < size(); ++index) {
+          for (std::size_t index = 0; index < size(); ++index) {
             new (tmp.big_->data_ + index) T(std::move(small_[index]));
             ++tmp.size_;
           }
@@ -419,10 +418,8 @@ public:
       return;
     }
     SocowVector tmp(new_capacity(big_->capacity));
-    std::size_t index = 0;
     if (big_->ref_count > 1) {
-      std::size_t index = 0;
-      for (; index < size(); ++index) {
+      for (std::size_t index = 0 ; index < size(); ++index) {
         new (tmp.big_->data_ + index) T(big_->data_[index]);
         ++tmp.size_;
       }
@@ -430,7 +427,7 @@ public:
     } else {
       new (tmp.big_->data_ + size()) T(std::forward<U>(value));
       try {
-        for (; index < size(); ++index) {
+        for (std::size_t index = 0; index < size(); ++index) {
           new (tmp.big_->data_ + index) T(std::move(big_->data_[index]));
           ++tmp.size_;
         }
