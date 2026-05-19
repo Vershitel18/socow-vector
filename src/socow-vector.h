@@ -377,6 +377,26 @@ public:
   // if small or big_unshared and realocation -> constract new element in new place -> move old elements
   // if big_shared and realocation -> copy old elements -> constract new element in new place
   template <typename U>
+  void push_back_me(U&& value) {
+    if (is_small(*this)) {
+      if (size() < SMALL_SIZE) { // места в маленьком векторе хватает
+        new (small_ + size_) T(std::forward<U>(value));
+        ++size_;
+        return;
+      }
+      // места в маленьком векторе не хватает -> нужно перейти в большой
+      SocowVector tmp(new_capacity(size())); // -> big unshared buffer
+      new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+      for (std::size_t index = 0; index < size(); ++index) {
+        new (tmp.big_->data_ + index) T(std::move(small_[index])); // move old elements
+        ++tmp.size_;
+      }
+      clear(); // for small we destruction oll elements in vector and size_ = 0
+      swap(tmp);
+    }
+  }
+
+  template <typename U>
   void push_back_method(U&& value) {
     if (is_small(*this)) {
       if (size_ < SMALL_SIZE) {
@@ -391,6 +411,7 @@ public:
       ++tmp.size_;
 
       clear_data(*this);
+
       big_ = tmp.big_;
       tmp.big_ = nullptr;
       is_big = true;
@@ -414,10 +435,8 @@ public:
 
       big_ = tmp.big_;
       tmp.big_ = nullptr;
-      tmp.is_big = false;
       is_big = true;
       size_ = tmp.size_;
-      tmp.size_ = 0;
       return;
     }
 
@@ -451,10 +470,8 @@ public:
 
     big_ = tmp.big_;
     tmp.big_ = nullptr;
-    tmp.is_big = false;
     is_big = true;
     size_ = tmp.size_;
-    tmp.size_ = 0;
   }
 
   // Strong garanty
