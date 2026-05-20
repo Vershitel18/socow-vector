@@ -88,17 +88,8 @@ public:
         tmp.size_ = other.size();
 
         clear_data(*this);
-        // for (std::size_t i = 0; i < tmp.size(); ++i) {
-        //   new (small_ + i) T(std::move(tmp.small_[i]));
-        // }
-        // size_ = tmp.size();
-        // is_big = false;
         swap(tmp);
       } else {
-        // if (is_small(*this)) {
-        //   destroy_small();
-        // }
-        // release_ref();
         clear_data(*this);
         big_ = other.big_;
         ref_plus();
@@ -112,29 +103,24 @@ public:
   // nothrow
   SocowVector& operator=(SocowVector&& other) noexcept {
     if (this != &other) {
-      if (is_small(other)) {
-        clear_data(*this);
-        for (std::size_t i = 0; i < other.size(); ++i) {
-          new (small_ + i) T(std::move(other.small_[i]));
-        }
-        size_ = other.size();
-        is_big = false;
-      } else {
-        clear_data(*this);
-        big_ = nullptr;
-        // if (is_small(*this)) {
-        //   destroy_small();
-        // } else {
-        //   release_ref();
-        //
-        // }
-        big_ = other.big_;
-        size_ = other.size();
-        is_big = true;
-        other.big_ = nullptr;
-        other.size_ = 0;
-        other.is_big = false;
-      }
+      clear_data(*this);
+      swap(other);
+      // if (is_small(other)) {
+      //   clear_data(*this);
+      //   swap(other);
+      //   // std::uninitialized_move_n(other.small_, other.size(), small_);
+      //   // size_ = other.size();
+      //   // is_big = false;
+      // } else {
+      //   clear_data(*this);
+      //   swap(other);
+      //   // big_ = other.big_;
+      //   // size_ = other.size();
+      //   // is_big = true;
+      //   // other.big_ = nullptr;
+      //   // other.size_ = 0;
+      //   // other.is_big = false;
+      // }
     }
     return *this;
   }
