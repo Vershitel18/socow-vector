@@ -597,7 +597,6 @@ public:
     for (auto it = raw_data() + size() - 1; it != mutable_pos; --it) {
       std::swap(*it, *(it - 1));
     }
-
     return raw_data() + offset;
   }
 
@@ -648,10 +647,6 @@ private:
       }
       is_big = false;
       std::uninitialized_move_n(other.raw_data(), std::min(capacity, other.size()), raw_data());
-      // for (std::size_t index = 0; index < std::min(capacity, other.size()); ++index) {
-      //   new (small_ + index) T(std::move(other.small_[index]));
-      //   ++size_;
-      // }
       size_ = std::min(capacity, other.size());
       return;
       // capacity <= SMALL_SIZE -> сырая память в small_ уже есть размера больше чем capacity
@@ -672,7 +667,7 @@ private:
             ++size_;
           }
         } catch (...) {
-          clear();
+          clear_data(*this);
           throw;
         }
       }
@@ -688,7 +683,7 @@ private:
             ++size_;
           }
         } catch (...) {
-          clear();
+          clear_data(*this);
           throw;
         }
       }
