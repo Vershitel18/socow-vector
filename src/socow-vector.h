@@ -419,8 +419,15 @@ public:
           clear();
           swap(tmp);
         } else {
-          SocowVector tmp(*this, new_capacity(size()));
+          SocowVector tmp(new_capacity(size()));
           new (tmp.big_->data_ + size()) T(std::forward<U>(value));
+          try {
+            std::uninitialized_copy_n(raw_data(), size(), tmp.raw_data());
+            tmp.size_ = size();
+          } catch (...) {
+            (tmp.big_->data_ + size())->~T();
+            throw;
+          }
           ++tmp.size_;
           clear();
           swap(tmp);
