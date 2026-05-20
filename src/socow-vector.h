@@ -398,15 +398,15 @@ public:
           new (big_->data_ + size()) T(std::forward<U>(value));
           ++size_;
         } else { // shared big buffer
-          SocowVector tmp(*this, capacity());
+          SocowVector tmp(capacity());
           new (tmp.big_->data_ + size()) T(std::forward<U>(value)); // constract new elements
-          // try {
-          //   std::uninitialized_copy_n(raw_data(), size(), tmp.raw_data());
-          //   tmp.size_ = size();
-          // } catch (...) {
-          //   (tmp.big_->data_ + size())->~T();
-          //   throw;
-          // }
+          try {
+            std::uninitialized_copy_n(raw_data(), size(), tmp.raw_data());
+            tmp.size_ = size();
+          } catch (...) {
+            (tmp.big_->data_ + size())->~T();
+            throw;
+          }
           ++tmp.size_;
           clear();
           swap(tmp);
