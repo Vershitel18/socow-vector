@@ -398,15 +398,15 @@ public:
           new (big_->data_ + size()) T(std::forward<U>(value));
           ++size_;
         } else { // shared big buffer
-          SocowVector tmp(capacity());
+          SocowVector tmp(*this, capacity());
           new (tmp.big_->data_ + size()) T(std::forward<U>(value)); // constract new elements
-          try {
-            std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
-            tmp.size_ = size();
-          } catch (...) {
-            (tmp.big_->data_ + size())->~T();
-            throw;
-          }
+          // try {
+          //   std::uninitialized_copy_n(raw_data(), size(), tmp.raw_data());
+          //   tmp.size_ = size();
+          // } catch (...) {
+          //   (tmp.big_->data_ + size())->~T();
+          //   throw;
+          // }
           ++tmp.size_;
           clear();
           swap(tmp);
@@ -660,10 +660,6 @@ private:
       is_big = true;
       if (other.big_->ref_count == 1) {
         std::uninitialized_move_n(other.raw_data(), std::min(other.size(), capacity), raw_data());
-        // for (std::size_t index = 0; index < std::min(other.size(), capacity); ++index) {
-        //   new (big_->data_ + index) T(std::move(other.big_->data_[index]));
-        //   ++size_;
-        // }
         size_ = std::min(capacity, other.size_);
       } else {
         try {
@@ -680,10 +676,6 @@ private:
       is_big = false;
       if (other.big_->ref_count == 1) {
         std::uninitialized_move_n(other.raw_data(), std::min(other.size(), capacity), raw_data());
-        // for (std::size_t index = 0; index < std::min(other.size(), capacity); ++index) {
-        //   new (big_->data_ + index) T(std::move(other.big_->data_[index]));
-        //   ++size_;
-        // }
         size_ = std::min(capacity, other.size_);
       } else {
         try {
