@@ -113,13 +113,6 @@ public:
   SocowVector& operator=(SocowVector&& other) noexcept {
     if (this != &other) {
       if (is_small(other)) {
-        if (is_small(*this)) {
-          destroy_small();
-        } else {
-          release_ref();
-          big_ = nullptr;
-          is_big = false;
-        }
         clear_data(*this);
         for (std::size_t i = 0; i < other.size(); ++i) {
           new (small_ + i) T(std::move(other.small_[i]));
