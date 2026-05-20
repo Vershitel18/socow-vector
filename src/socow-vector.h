@@ -429,84 +429,6 @@ public:
     }
   }
 
-  // template <typename U>
-  // void push_back_method(U&& value) {
-  //   if (is_small(*this)) {
-  //     if (size_ < SMALL_SIZE) {
-  //       new (small_ + size_) T(std::forward<U>(value));
-  //       ++size_;
-  //       return;
-  //     }
-  //
-  //     SocowVector tmp(*this, new_capacity(size_));
-  //
-  //     new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
-  //     ++tmp.size_;
-  //
-  //     clear_data(*this);
-  //
-  //     big_ = tmp.big_;
-  //     tmp.big_ = nullptr;
-  //     is_big = true;
-  //     size_ = tmp.size_;
-  //     return;
-  //   }
-  //
-  //   if (big_->capacity > size_) {
-  //     if (big_->ref_count == 1) {
-  //       new (big_->data_ + size_) T(std::forward<U>(value));
-  //       ++size_;
-  //       return;
-  //     }
-  //
-  //     SocowVector tmp(*this, big_->capacity);
-  //
-  //     new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
-  //     ++tmp.size_;
-  //
-  //     clear_data(*this);
-  //
-  //     big_ = tmp.big_;
-  //     tmp.big_ = nullptr;
-  //     is_big = true;
-  //     size_ = tmp.size_;
-  //     return;
-  //   }
-  //
-  //   SocowVector tmp(new_capacity(big_->capacity));
-  //
-  //   if (big_->ref_count > 1) {
-  //     for (std::size_t i = 0; i < size_; ++i) {
-  //       new (tmp.big_->data_ + tmp.size_) T(big_->data_[i]);
-  //       ++tmp.size_;
-  //     }
-  //
-  //     new (tmp.big_->data_ + tmp.size_) T(std::forward<U>(value));
-  //     ++tmp.size_;
-  //   } else {
-  //     new (tmp.big_->data_ + size_) T(std::forward<U>(value));
-  //
-  //     try {
-  //       for (std::size_t i = 0; i < size_; ++i) {
-  //         new (tmp.big_->data_ + tmp.size_) T(std::move(big_->data_[i]));
-  //         ++tmp.size_;
-  //       }
-  //     } catch (...) {
-  //       (tmp.big_->data_ + size_)->~T();
-  //       throw;
-  //     }
-  //
-  //     ++tmp.size_;
-  //   }
-  //
-  //   clear_data(*this);
-  //
-  //   big_ = tmp.big_;
-  //   tmp.big_ = nullptr;
-  //   is_big = true;
-  //   size_ = tmp.size_;
-  // }
-
   // Strong garanty
   void push_back(const T& value) {
     push_back_me(value);
@@ -530,9 +452,6 @@ public:
           --size_;
           return;
         }
-        // detauch(); // strong garanty
-        // (big_->data_ + size() - 1)->~T(); // nothrow
-        // --size_;
         SocowVector tmp(*this, size() - 1);
         clear();
         swap(tmp);
@@ -669,6 +588,11 @@ public:
   Iterator insert(ConstIterator pos, T&& value) {
     ConstPointer base = static_cast<const SocowVector&>(*this).begin();
     std::size_t offset = pos - base;
+    if (std::addressof(value) >= raw_data() && std::addressof(value) < raw_data() + size()) {
+      // Если да, то это самоперемещение. Копируем элемент, чтобы избежать UB.
+      T value_copy = value;
+      return insert(pos, std::move(value_copy));
+    }
 
     push_back(std::move(value));
 
