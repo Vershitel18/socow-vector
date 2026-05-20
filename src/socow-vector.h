@@ -398,8 +398,15 @@ public:
           new (big_->data_ + size()) T(std::forward<U>(value));
           ++size_;
         } else { // shared big buffer
-          SocowVector tmp(*this, capacity());
+          SocowVector tmp(capacity());
           new (tmp.big_->data_ + size()) T(std::forward<U>(value)); // constract new elements
+          try {
+            std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
+            tmp.size_ = size();
+          } catch (...) {
+            (tmp.big_->data_ + size())->~T();
+            throw;
+          }
           ++tmp.size_;
           clear();
           swap(tmp);
@@ -419,15 +426,15 @@ public:
           clear();
           swap(tmp);
         } else {
-          SocowVector tmp(new_capacity(size()));
+          SocowVector tmp(*this, new_capacity(size()));
           new (tmp.big_->data_ + size()) T(std::forward<U>(value));
-          try {
-            std::uninitialized_copy_n(raw_data(), size(), tmp.raw_data());
-            tmp.size_ = size();
-          } catch (...) {
-            (tmp.big_->data_ + size())->~T();
-            throw;
-          }
+          // try {
+          //   std::uninitialized_copy_n(raw_data(), size(), tmp.raw_data());
+          //   tmp.size_ = size();
+          // } catch (...) {
+          //   (tmp.big_->data_ + size())->~T();
+          //   throw;
+          // }
           ++tmp.size_;
           clear();
           swap(tmp);
@@ -595,11 +602,6 @@ public:
   Iterator insert(ConstIterator pos, T&& value) {
     ConstPointer base = static_cast<const SocowVector&>(*this).begin();
     std::size_t offset = pos - base;
-    if (std::addressof(value) >= raw_data() && std::addressof(value) < raw_data() + size()) {
-      // Если да, то это самоперемещение. Копируем элемент, чтобы избежать UB.
-      T value_copy = value;
-      return insert(pos, std::move(value_copy));
-    }
 
     push_back(std::move(value));
 
