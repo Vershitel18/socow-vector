@@ -51,7 +51,7 @@ public:
 
   // Strong garanty
   SocowVector(const SocowVector& other) {
-    if (!is_small(other)) {
+    if (!other.is_small()) {
       big_ = other.big_;
       ref_plus();
       is_big = true;
@@ -64,7 +64,7 @@ public:
 
   // nothrow
   SocowVector(SocowVector&& other) noexcept {
-    if (!is_small(other)) {
+    if (!other.is_small()) {
       big_ = other.big_;
       size_ = other.size_;
       is_big = true;
@@ -82,15 +82,15 @@ public:
   // strong garanty
   SocowVector& operator=(const SocowVector& other) {
     if (this != &other) {
-      if (is_small(other)) {
+      if (other.is_small()) {
         SocowVector tmp(other.size());
         std::uninitialized_copy_n(other.raw_data(), other.size(), tmp.raw_data());
         tmp.size_ = other.size();
 
-        clear_data(*this);
+        clear_data();
         swap(tmp);
       } else {
-        clear_data(*this);
+        clear_data();
         big_ = other.big_;
         ref_plus();
         size_ = other.size_;
@@ -103,7 +103,7 @@ public:
   // nothrow
   SocowVector& operator=(SocowVector&& other) noexcept {
     if (this != &other) {
-      clear_data(*this);
+      clear_data();
       swap(other);
       // if (is_small(other)) {
       //   clear_data(*this);
@@ -125,79 +125,42 @@ public:
     return *this;
   }
 
-  // notrhrow
+  // nothrow
   ~SocowVector() {
-    if (!is_small(*this)) {
-      release_ref();
-      big_ = nullptr;
-    } else {
-      for (std::size_t i = size_; i > 0; --i) {
-        small_[i - 1].~T();
-      }
-    }
-    size_ = 0;
-  }
-
-  void destroy_small() {
-    for (std::size_t i = size_; i > 0; --i) {
-      small_[i - 1].~T();
-    }
-  }
-
-  void small_to_big(SocowVector& object, std::size_t new_capacity) {
-    Buffer* buffer =
-        static_cast<Buffer*>(operator new(sizeof(Buffer) + (new_capacity * sizeof(T)), std::align_val_t(alignof(T))));
-    buffer->capacity = new_capacity;
-    buffer->ref_count = 1;
-
-    std::size_t index = 0;
-    try {
-      for (; index < object.size_; ++index) {
-        new (buffer->data_ + index) T(object.small_[index]);
-      }
-    } catch (...) {
-      for (; index > 0; --index) {
-        (buffer->data_ + index - 1)->~T();
-      }
-      operator delete(buffer, std::align_val_t(alignof(T)));
-      throw;
-    }
-
-    for (std::size_t i = object.size_; i > 0; --i) {
-      object.small_[i - 1].~T();
-    }
-    object.big_ = buffer;
-    object.is_big = true;
-  }
-
-  void big_to_small(SocowVector& object) {
-    if (object.size() <= SMALL_SIZE && object.is_big) {
-      SocowVector tmp(object, SMALL_SIZE);
-      object.swap(tmp);
-    }
+    // if (!is_small(*this)) {
+    //   release_ref();
+    //   big_ = nullptr;
+    // } else {
+    //   for (std::size_t i = size_; i > 0; --i) {
+    //     small_[i - 1].~T();
+    //   }
+    // }
+    // size_ = 0;
+    clear_data();
   }
 
   // strong garanty
   void detauch() {
-    if (!is_small(*this) && this->big_->ref_count > 1) {
+    if (!is_small() && this->big_->ref_count > 1) {
       Buffer* buffer = static_cast<Buffer*>(operator new(
           sizeof(Buffer) + (big_->capacity * sizeof(T)),
           std::align_val_t(alignof(T))
       ));
       buffer->capacity = big_->capacity;
       buffer->ref_count = 1;
-      std::size_t index = 0;
-      try {
-        for (; index < size_; ++index) {
-          new (buffer->data_ + index) T(big_->data_[index]);
-        }
-      } catch (...) {
-        for (; index > 0; --index) {
-          (buffer->data_ + index - 1)->~T();
-        }
-        operator delete(buffer, std::align_val_t(alignof(T)));
-        throw;
-      }
+      std::uninitialized_copy_n(raw_data(), size(), buffer->data_);
+      // std::size_t index = 0;
+      // try {
+      //   for (; index < size_; ++index) {
+      //     new (buffer->data_ + index) T(big_->data_[index]);
+      //   }
+      // } catch (...) {
+      //   for (; index > 0; --index) {
+      //     (buffer->data_ + index - 1)->~T();
+      //   }
+      //   operator delete(buffer, std::align_val_t(alignof(T)));
+      //   throw;
+      // }
       release_ref();
       big_ = buffer;
     }
@@ -209,24 +172,28 @@ public:
       return;
     }
     using std::swap;
-    if (is_small(*this) && is_small(other)) {
+    if (is_small() && other.is_small()) {
       std::size_t index = 0;
       for (; index < std::min(this->size_, other.size_); ++index) {
         swap(small_[index], other.small_[index]); // nothrow
       }
       SocowVector* small_vector = this->size_ < other.size_ ? this : &other;
       SocowVector* big_vector = this->size_ < other.size_ ? &other : this;
+      std::uninitialized_move_n(
+          big_vector->raw_data() + index,
+          big_vector->size() - index,
+          small_vector->raw_data() + index
+      );
       for (; index < big_vector->size_; ++index) {
-        new (small_vector->small_ + index) T(std::move(big_vector->small_[index])); // nothrow
         big_vector->small_[index].~T();
       }
       swap(size_, other.size_);
-    } else if (!is_small(*this) && !is_small(other)) {
+    } else if (!is_small() && !other.is_small()) {
       swap(big_, other.big_); // nothrow
       swap(size_, other.size_); // nothrow
     } else {
-      SocowVector* small_vector = is_small(*this) ? this : &other;
-      SocowVector* big_vector = is_small(*this) ? &other : this;
+      SocowVector* small_vector = is_small() ? this : &other;
+      SocowVector* big_vector = is_small() ? &other : this;
 
       Buffer* big_buffer = big_vector->big_;
       std::size_t big_size = big_vector->size_;
@@ -244,34 +211,34 @@ public:
     }
   }
 
-  std::size_t size() const {
+  std::size_t size() const noexcept {
     return size_;
   }
 
-  std::size_t capacity() const {
-    if (is_small(*this)) {
+  std::size_t capacity() const noexcept {
+    if (is_small()) {
       return SMALL_SIZE;
     }
     return big_->capacity;
   }
 
-  bool empty() const {
+  // nothrow
+  bool empty() const noexcept {
     return size_ == 0;
   }
 
-  //
-  // (size) strong garanty
+  // O(size) strong garanty, because detauch have a strong garanty
   Reference operator[](std::size_t index) {
-    if (is_small(*this)) {
+    if (is_small()) {
       return small_[index];
     }
     detauch();
     return big_->data_[index];
   }
 
-  // O(1) nothrow
+  // O(1) nothrow, because
   ConstReference operator[](std::size_t index) const {
-    if (is_small(*this)) {
+    if (is_small()) {
       return small_[index];
     }
     return big_->data_[index];
@@ -310,7 +277,7 @@ public:
   // O(size) strong
   Iterator begin() {
     detauch();
-    if (is_small(*this)) {
+    if (is_small()) {
       return small_;
     }
     return big_->data_;
@@ -319,7 +286,7 @@ public:
   // O(size) strong
   Iterator end() {
     detauch();
-    if (is_small(*this)) {
+    if (is_small()) {
       return small_ + size_;
     }
     return big_->data_ + size_;
@@ -327,7 +294,7 @@ public:
 
   // O(1) nothrow
   ConstIterator begin() const noexcept {
-    if (is_small(*this)) {
+    if (is_small()) {
       return small_;
     }
     return big_->data_;
@@ -335,7 +302,7 @@ public:
 
   // O(1) nothrow
   ConstIterator end() const noexcept {
-    if (is_small(*this)) {
+    if (is_small()) {
       return small_ + size_;
     }
     return big_->data_ + size_;
@@ -345,7 +312,7 @@ public:
   // if big_shared and realocation -> copy old elements -> constract new element in new place
   template <typename U>
   void push_back_me(U&& value) {
-    if (is_small(*this)) {
+    if (is_small()) {
       if (size() < SMALL_SIZE) { // места в маленьком векторе хватает
         new (small_ + size_) T(std::forward<U>(value));
         ++size_;
@@ -356,7 +323,7 @@ public:
       new (tmp.big_->data_ + size()) T(std::forward<U>(value));
       std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
       tmp.size_ = size() + 1;
-      clear_data(*this); // for small we destruction oll elements in vector and size_ = 0
+      clear_data(); // for small we destruction oll elements in vector and size_ = 0
       swap(tmp);
     } else { // this is a big vector
       if (capacity() > size()) { // место есть
@@ -376,7 +343,7 @@ public:
           //   throw;
           // }
           ++tmp.size_;
-          clear_data(*this);
+          clear_data();
           swap(tmp);
         }
       } else { // места не хватает -> realocation
@@ -391,7 +358,7 @@ public:
             throw;
           }
           ++tmp.size_;
-          clear_data(*this);
+          clear_data();
           swap(tmp);
         } else {
           SocowVector tmp(*this, new_capacity(size()));
@@ -406,7 +373,7 @@ public:
           //   throw;
           // }
           ++tmp.size_;
-          clear_data(*this);
+          clear_data();
           swap(tmp);
         }
       }
@@ -427,7 +394,7 @@ public:
   // if vector is small_mode -> nothrow
   void pop_back() { // no call small_to_big, because capacity not modified
     if (size() != 0) {
-      if (is_small(*this)) {
+      if (is_small()) {
         (small_ + size() - 1)->~T(); // nothrow
         --size_;
       } else {
@@ -437,7 +404,7 @@ public:
           return;
         }
         SocowVector tmp(*this, size() - 1);
-        clear_data(*this);
+        clear_data();
         swap(tmp);
       }
     }
@@ -445,12 +412,12 @@ public:
 
   // strong
   void reserve(std::size_t new_capacity) {
-    if (is_small(*this) && new_capacity <= SMALL_SIZE) {
+    if (is_small() && new_capacity <= SMALL_SIZE) {
       return;
     }
-    if (capacity() < new_capacity || (!is_small(*this) && big_->ref_count > 1 && new_capacity > size())) {
+    if (capacity() < new_capacity || (!is_small() && big_->ref_count > 1 && new_capacity > size())) {
       SocowVector tmp(*this, new_capacity);
-      clear_data(*this);
+      clear_data();
       swap(tmp);
     }
   }
@@ -459,35 +426,35 @@ public:
     if (size() == capacity()) {
       return;
     }
-    if (is_small(*this)) {
+    if (is_small()) {
       return;
     }
     SocowVector tmp(*this, size_);
-    clear_data(*this);
+    clear_data();
     swap(tmp);
   }
 
-  void clear_data(SocowVector& object) {
-    if (is_small(object)) {
-      for (std::size_t index = object.size(); index > 0; --index) {
-        (object.small_ + index - 1)->~T();
+  void clear_data() {
+    if (is_small()) {
+      for (std::size_t index = size(); index > 0; --index) {
+        (small_ + index - 1)->~T();
       }
     } else {
-      object.release_ref();
+      release_ref();
     }
     size_ = 0;
     is_big = false;
   }
 
   void clear() {
-    if (!is_small(*this) && big_->ref_count == 1) {
+    if (!is_small() && big_->ref_count == 1) {
       for (std::size_t index = size(); index > 0; --index) {
         (big_->data_ + index - 1)->~T();
       }
       size_ = 0;
       return;
     }
-    clear_data(*this);
+    clear_data();
     // if (is_small(*this)) {
     //   for (std::size_t index = size(); index > 0; --index) {
     //     (small_ + index - 1)->~T();
@@ -508,11 +475,11 @@ public:
   }
 
   Pointer raw_data() noexcept {
-    return is_small(*this) ? small_ : big_->data_;
+    return is_small() ? small_ : big_->data_;
   }
 
   ConstPointer raw_data() const noexcept {
-    return is_small(*this) ? small_ : big_->data_;
+    return is_small() ? small_ : big_->data_;
   }
 
   Iterator erase(ConstIterator pos) {
@@ -521,7 +488,7 @@ public:
 
   Iterator erase(ConstIterator first, ConstIterator last) {
     ConstPointer base = static_cast<const SocowVector&>(*this).begin();
-    Pointer data = is_small(*this) ? small_ : big_->data_;
+    Pointer data = is_small() ? small_ : big_->data_;
 
     std::size_t offset = first - base;
     std::size_t length = last - first;
@@ -532,9 +499,9 @@ public:
       return data + offset;
     }
 
-    if (!is_small(*this) && big_->ref_count > 1) {
+    if (!is_small() && big_->ref_count > 1) {
       SocowVector tmp(old_size - length);
-      Pointer new_data = is_small(tmp) ? tmp.small_ : tmp.big_->data_;
+      Pointer new_data = tmp.is_small() ? tmp.small_ : tmp.big_->data_;
 
       for (std::size_t i = 0; i < offset; ++i) {
         new (new_data + tmp.size_) T(data[i]);
@@ -545,9 +512,9 @@ public:
         new (new_data + tmp.size_) T(data[i]);
         ++tmp.size_;
       }
-      clear_data(*this);
+      clear_data();
       swap(tmp);
-      return (is_small(*this) ? small_ : big_->data_) + offset;
+      return (is_small() ? small_ : big_->data_) + offset;
     }
     for (std::size_t i = 0; i < elements; ++i) {
       using std::swap;
@@ -609,7 +576,7 @@ private:
 
   SocowVector(SocowVector& other, std::size_t capacity)
       : size_(0) {
-    if (is_small(other)) { // делаем от маленького вектора
+    if (other.is_small()) { // делаем от маленького вектора
       if (capacity > SMALL_SIZE) { // надо перевести в большой вектор
         big_ =
             static_cast<Buffer*>(operator new(sizeof(Buffer) + (capacity * sizeof(T)), std::align_val_t(alignof(T))));
@@ -642,7 +609,7 @@ private:
             ++size_;
           }
         } catch (...) {
-          clear_data(*this);
+          clear_data();
           throw;
         }
       }
@@ -658,7 +625,7 @@ private:
             ++size_;
           }
         } catch (...) {
-          clear_data(*this);
+          clear_data();
           throw;
         }
       }
@@ -666,12 +633,12 @@ private:
     }
   }
 
-  static bool is_small(const SocowVector& object) {
-    return object.size_ <= SMALL_SIZE && object.is_big == false;
+  bool is_small() const noexcept {
+    return size() <= SMALL_SIZE && !is_big;
   }
 
   void release_ref() noexcept {
-    if (is_small(*this) || (big_ == nullptr)) {
+    if (is_small() || (big_ == nullptr)) {
       return;
     }
     --big_->ref_count;
