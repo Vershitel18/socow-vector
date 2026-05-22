@@ -392,7 +392,7 @@ private:
     if (capacity > SMALL_SIZE) {
       big_ = allocate(capacity);
       is_big = true;
-      if (unshared()) {
+      if (other.unshared()) {
         std::uninitialized_move_n(other.raw_data(), std::min(other.size(), capacity), raw_data());
         size_ = std::min(capacity, other.size_);
       } else {
@@ -407,7 +407,7 @@ private:
       return;
     }
     is_big = false;
-    if (unshared()) {
+    if (other.unshared()) {
       std::uninitialized_move_n(other.raw_data(), std::min(other.size(), capacity), raw_data());
       size_ = std::min(capacity, other.size_);
     } else {
