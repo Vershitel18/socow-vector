@@ -343,7 +343,8 @@ private:
   static Buffer* allocate(const std::size_t capacity) {
     Buffer* big =
         static_cast<Buffer*>(operator new(sizeof(Buffer) + capacity * sizeof(T), std::align_val_t(alignof(Buffer))));
-    new (big) Buffer{capacity, 1};
+    big->capacity = capacity;
+    big->ref_count = 1;
     return big;
   }
 
