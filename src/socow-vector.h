@@ -85,8 +85,7 @@ public:
         SocowVector tmp(other.size());
         std::uninitialized_copy_n(other.raw_data(), other.size(), tmp.raw_data());
         tmp.size_ = other.size();
-        clear_data();
-        swap(tmp);
+        *this = std::move(tmp);
       } else {
         clear_data();
         big_ = other.big_;
@@ -313,8 +312,7 @@ public:
       std::uninitialized_copy_n(data + offset + length, old_size - offset - length, new_data + tmp.size());
       tmp.size_ += old_size - offset - length;
 
-      clear_data();
-      swap(tmp);
+      *this = std::move(tmp);
       return raw_data() + offset;
     }
 
@@ -344,11 +342,8 @@ public:
 private:
   static Buffer* allocate(const std::size_t capacity) {
     Buffer* big =
-        static_cast<Buffer*>(operator new(sizeof(Buffer) + capacity * sizeof(T), std::align_val_t(alignof(T))));
-
-    big->capacity = capacity;
-    big->ref_count = 1;
-
+        static_cast<Buffer*>(operator new(sizeof(Buffer) + capacity * sizeof(T), std::align_val_t(alignof(Buffer))));
+    new (big) Buffer{capacity, 1};
     return big;
   }
 
@@ -432,7 +427,7 @@ private:
       try {
         std::uninitialized_copy_n(raw_data(), size(), buffer->data_);
       } catch (...) {
-        operator delete(buffer, std::align_val_t(alignof(T)));
+        operator delete(buffer, std::align_val_t(alignof(Buffer)));
         throw;
       }
       release_ref();
@@ -455,7 +450,7 @@ private:
         for (std::size_t i = size_; i > 0; --i) {
           (big_->data_ + i - 1)->~T();
         }
-        operator delete(big_, std::align_val_t(alignof(T)));
+        operator delete(big_, std::align_val_t(alignof(Buffer)));
       }
       big_ = nullptr;
     }
@@ -483,8 +478,7 @@ private:
   // strong guarantee
   void swap_tmp_size(std::size_t size) {
     SocowVector tmp(*this, size);
-    clear_data();
-    swap(tmp);
+    *this = std::move(tmp);
   }
 
   bool is_shared() const noexcept {
@@ -499,8 +493,7 @@ private:
   void push_to_tmp(SocowVector& tmp, U&& value) {
     new (tmp.raw_data() + size()) T(std::forward<U>(value));
     ++tmp.size_;
-    clear_data();
-    swap(tmp);
+    *this = std::move(tmp);
   }
 
   template <typename U>
@@ -520,8 +513,7 @@ private:
       new (tmp.raw_data() + size()) T(std::forward<U>(value));
       std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
       tmp.size_ = size() + 1;
-      clear_data();
-      swap(tmp);
+      *this = std::move(tmp);
       return;
     }
     if (unshared()) {
@@ -534,8 +526,7 @@ private:
         (tmp.raw_data() + size())->~T();
         throw;
       }
-      clear_data();
-      swap(tmp);
+      *this = std::move(tmp);
       return;
     }
     SocowVector tmp(*this, new_capacity(size()));
