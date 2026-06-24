@@ -341,11 +341,9 @@ public:
 
 private:
   static Buffer* allocate(const std::size_t capacity) {
-    Buffer* big =
+    void* big =
         static_cast<Buffer*>(operator new(sizeof(Buffer) + capacity * sizeof(T), std::align_val_t(alignof(Buffer))));
-    big->capacity = capacity;
-    big->ref_count = 1;
-    return big;
+    return new (big) Buffer(capacity, 1, {});
   }
 
   Pointer raw_data() noexcept {
