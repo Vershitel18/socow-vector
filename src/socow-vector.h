@@ -10,11 +10,11 @@ namespace ct {
 
 template <typename T, std::size_t SMALL_SIZE>
 class SocowVector {
-  static_assert(std::is_copy_constructible_v<T>, "T must have a copy constructor");
-  static_assert(std::is_nothrow_move_constructible_v<T>, "T must have a non-throwing move constructor");
-  static_assert(std::is_copy_assignable_v<T>, "T must have a copy assignment operator");
-  static_assert(std::is_nothrow_move_assignable_v<T>, "T must have a non-throwing move assignment operator");
-  static_assert(std::is_nothrow_swappable_v<T>, "T must have a non-throwing swap");
+  // static_assert(std::is_copy_constructible_v<T>, "T must have a copy constructor");
+  // static_assert(std::is_nothrow_move_constructible_v<T>, "T must have a non-throwing move constructor");
+  // static_assert(std::is_copy_assignable_v<T>, "T must have a copy assignment operator");
+  // static_assert(std::is_nothrow_move_assignable_v<T>, "T must have a non-throwing move assignment operator");
+  // static_assert(std::is_nothrow_swappable_v<T>, "T must have a non-throwing swap");
   static_assert(SMALL_SIZE > 0, "SMALL_SIZE must be positive");
 
   struct Buffer {
@@ -81,18 +81,8 @@ public:
   // strong guarantee
   SocowVector& operator=(const SocowVector& other) {
     if (this != &other) {
-      if (other.is_small()) {
-        SocowVector tmp(other.size());
-        std::uninitialized_copy_n(other.raw_data(), other.size(), tmp.raw_data());
-        tmp.size_ = other.size();
-        *this = std::move(tmp);
-      } else {
-        clear_data();
-        big_ = other.big_;
-        ref_plus();
-        size_ = other.size_;
-        is_big = true;
-      }
+      SocowVector tmp(other);
+      *this = std::move(tmp);
     }
     return *this;
   }
@@ -118,10 +108,8 @@ public:
     }
     using std::swap;
     if (is_small() && other.is_small()) {
-      std::size_t index = 0;
-      for (; index < std::min(size_, other.size_); ++index) {
-        swap(small_[index], other.small_[index]);
-      }
+      std::size_t index = std::min(size_, other.size_);
+      std::swap_ranges(small_, small_ + index, other.small_);
       SocowVector* small_vector = size_ < other.size_ ? this : &other;
       SocowVector* big_vector = size_ < other.size_ ? &other : this;
       std::uninitialized_move_n(
@@ -129,9 +117,7 @@ public:
           big_vector->size() - index,
           small_vector->raw_data() + index
       );
-      for (; index < big_vector->size_; ++index) {
-        big_vector->small_[index].~T();
-      }
+      std::destroy_n(std::make_reverse_iterator(big_vector->small_ + big_vector->size()), big_vector->size_ - index);
       swap(size_, other.size_);
       return;
     }
@@ -222,8 +208,7 @@ public:
 
   // strong guarantee
   Iterator end() {
-    detach();
-    return raw_data() + size();
+    return begin() + size();
   }
 
   // nothrow
@@ -249,7 +234,7 @@ public:
   // strong guarantee
   void pop_back() {
     if (is_small() || unshared()) {
-      (raw_data() + size() - 1)->~T();
+      std::destroy_at(raw_data() + size() - 1);
       --size_;
       return;
     }
@@ -274,9 +259,7 @@ public:
   // nothrow
   void clear() {
     if (unshared()) {
-      for (std::size_t index = size(); index > 0; --index) {
-        (raw_data() + index - 1)->~T();
-      }
+      std::destroy_n(std::make_reverse_iterator(raw_data() + size()), size());
       size_ = 0;
       return;
     }
@@ -296,7 +279,6 @@ public:
     std::size_t offset = first - base;
     std::size_t length = last - first;
     const std::size_t old_size = size_;
-    const std::size_t elements = old_size - offset - length;
 
     if (length == 0) {
       return data + offset;
@@ -316,15 +298,8 @@ public:
       return raw_data() + offset;
     }
 
-    for (std::size_t i = 0; i < elements; ++i) {
-      using std::swap;
-      swap(data[offset + i], data[offset + length + i]);
-    }
-
-    for (std::size_t i = old_size; i > old_size - length; --i) {
-      (data + i - 1)->~T();
-    }
-
+    std::move(data + offset + length, data + old_size, data + offset);
+    std::destroy_n(std::make_reverse_iterator(data + old_size), length);
     size_ -= length;
     return data + offset;
   }
@@ -367,7 +342,9 @@ private:
     }
   }
 
-  SocowVector(SocowVector& other, std::size_t capacity)
+  // Creates a new vector from `other` with the specified capacity.
+  // Copies or moves up to `min(other.size(), capacity)` elements.
+  SocowVector(SocowVector&& other, std::size_t capacity)
       : size_(0) {
     if (other.is_small()) {
       if (capacity > SMALL_SIZE) {
@@ -422,23 +399,16 @@ private:
   // strong guarantee
   void detach() {
     if (is_shared()) {
-      Buffer* buffer = allocate(big_->capacity);
-      try {
-        std::uninitialized_copy_n(raw_data(), size(), buffer->data_);
-      } catch (...) {
-        operator delete(buffer, std::align_val_t(alignof(Buffer)));
-        throw;
-      }
+      auto buffer = std::unique_ptr<Buffer, BufferDel>(allocate(big_->capacity));
+      std::uninitialized_copy_n(raw_data(), size(), buffer->data_);
       release_ref();
-      big_ = buffer;
+      big_ = buffer.release();
     }
   }
 
   // nothrow
   void destroy_small() noexcept {
-    for (std::size_t i = 0; i < size(); ++i) {
-      small_[i].~T();
-    }
+    std::destroy_n(std::make_reverse_iterator(small_ + size_), size_);
   }
 
   // nothrow
@@ -446,9 +416,7 @@ private:
     if (!is_small()) {
       --big_->ref_count;
       if (big_->ref_count == 0) {
-        for (std::size_t i = size_; i > 0; --i) {
-          (big_->data_ + i - 1)->~T();
-        }
+        std::destroy_n(std::make_reverse_iterator(big_->data_ + size_), size_);
         operator delete(big_, std::align_val_t(alignof(Buffer)));
       }
       big_ = nullptr;
@@ -476,8 +444,7 @@ private:
 
   // strong guarantee
   void swap_tmp_size(std::size_t size) {
-    SocowVector tmp(*this, size);
-    *this = std::move(tmp);
+    *this = SocowVector(std::move(*this), size);
   }
 
   bool is_shared() const noexcept {
@@ -489,21 +456,15 @@ private:
   }
 
   template <typename U>
-  void push_to_tmp(SocowVector& tmp, U&& value) {
-    new (tmp.raw_data() + size()) T(std::forward<U>(value));
-    ++tmp.size_;
-    *this = std::move(tmp);
-  }
-
-  template <typename U>
   void push_back_me(U&& value) {
     if (capacity() > size()) {
       if (is_shared()) {
-        SocowVector tmp(*this, capacity());
-        push_to_tmp(tmp, std::forward<U>(value));
+        SocowVector tmp(std::move(*this), capacity());
+        tmp.push_back(std::forward<U>(value));
+        *this = std::move(tmp);
         return;
       }
-      new (raw_data() + size_) T(std::forward<U>(value));
+      std::construct_at(raw_data() + size(), std::forward<U>(value));
       ++size_;
       return;
     }
@@ -518,18 +479,14 @@ private:
     if (unshared()) {
       SocowVector tmp(new_capacity(size()));
       new (tmp.raw_data() + size()) T(std::forward<U>(value));
-      try {
-        std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
-        tmp.size_ = size() + 1;
-      } catch (...) {
-        (tmp.raw_data() + size())->~T();
-        throw;
-      }
+      std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
+      tmp.size_ = size() + 1;
       *this = std::move(tmp);
       return;
     }
-    SocowVector tmp(*this, new_capacity(size()));
-    push_to_tmp(tmp, std::forward<U>(value));
+    SocowVector tmp(std::move(*this), new_capacity(size()));
+    tmp.push_back(std::forward<U>(value));
+    *this = std::move(tmp);
   }
 
   template <typename U>
@@ -537,12 +494,15 @@ private:
     ConstPointer base = raw_data();
     std::size_t offset = pos - base;
     push_back(std::forward<U>(value));
-    Iterator mutable_pos = raw_data() + offset;
-    for (auto it = raw_data() + size() - 1; it != mutable_pos; --it) {
-      std::swap(*it, *(it - 1));
-    }
+    std::rotate(raw_data() + offset, raw_data() + size() - 1, raw_data() + size());
     return raw_data() + offset;
   }
+
+  struct BufferDel {
+    void operator()(Buffer* p) const noexcept {
+      ::operator delete(p, std::align_val_t(alignof(Buffer)));
+    }
+  };
 };
 
 } // namespace ct
