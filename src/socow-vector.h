@@ -10,11 +10,11 @@ namespace ct {
 
 template <typename T, std::size_t SMALL_SIZE>
 class SocowVector {
-  // static_assert(std::is_copy_constructible_v<T>, "T must have a copy constructor");
-  // static_assert(std::is_nothrow_move_constructible_v<T>, "T must have a non-throwing move constructor");
-  // static_assert(std::is_copy_assignable_v<T>, "T must have a copy assignment operator");
-  // static_assert(std::is_nothrow_move_assignable_v<T>, "T must have a non-throwing move assignment operator");
-  // static_assert(std::is_nothrow_swappable_v<T>, "T must have a non-throwing swap");
+  static_assert(std::is_copy_constructible_v<T>, "T must have a copy constructor");
+  static_assert(std::is_nothrow_move_constructible_v<T>, "T must have a non-throwing move constructor");
+  static_assert(std::is_copy_assignable_v<T>, "T must have a copy assignment operator");
+  static_assert(std::is_nothrow_move_assignable_v<T>, "T must have a non-throwing move assignment operator");
+  static_assert(std::is_nothrow_swappable_v<T>, "T must have a non-throwing swap");
   static_assert(SMALL_SIZE > 0, "SMALL_SIZE must be positive");
 
   struct Buffer {
@@ -473,7 +473,7 @@ private:
       new (tmp.raw_data() + size()) T(std::forward<U>(value));
       std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
       tmp.size_ = size() + 1;
-      *this = std::move(tmp);
+        *this = std::move(tmp);
       return;
     }
     if (unshared()) {
