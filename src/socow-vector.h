@@ -473,7 +473,7 @@ private:
       new (tmp.raw_data() + size()) T(std::forward<U>(value));
       std::uninitialized_move_n(raw_data(), size(), tmp.raw_data());
       tmp.size_ = size() + 1;
-        *this = std::move(tmp);
+      *this = std::move(tmp);
       return;
     }
     if (unshared()) {
